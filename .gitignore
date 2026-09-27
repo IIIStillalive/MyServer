@@ -1,0 +1,14 @@
+# 编译产物
+build/
+build-*/
+*.o
+*.out
+
+# 运行日志
+*.log
+live.err
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store

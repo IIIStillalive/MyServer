@@ -37,7 +37,9 @@ bool Epollpoller::isvaild() const{
     return epfd_ >= 0;
 }
 
-Epollpoller::Epollpoller() noexcept: epfd_(::epoll_create1(0)){} //create1() 失败了该怎么办?
+Epollpoller::Epollpoller() noexcept: epfd_(::epoll_create1(0)){
+    evs.resize(16);   // 给 epoll_wait 一个真实缓冲区；空 vector + maxevents>0 会越界写/EINVAL
+} //create1() 失败了该怎么办?
 Epollpoller::~Epollpoller(){
     if(isvaild())
         ::close(epfd_);
@@ -50,7 +52,9 @@ bool Epollpoller::updatechannel(Channel* ch){
     ev.events = ch->_events();
     auto it = conns.find(ev.data.fd);
     int op = (it == conns.end()) ? EPOLL_CTL_ADD : EPOLL_CTL_MOD; //判断是否已经在连接中
-    if(::epoll_ctl(epfd_, op, ch->fd(), &ev) < 0) return false;
+    if(::epoll_ctl(epfd_, op, ch->fd(), &ev) < 0){
+        return false;
+    }
     conns.emplace(ch->fd(), ch);
     return true;
 }
@@ -61,7 +65,7 @@ bool Epollpoller::removechannel(Channel* ch){
 }
 
 void Epollpoller::poll(int timeoutMs, std::vector<Channel*>& active){
-    int n = ::epoll_wait(epfd_, evs.data(), 16, timeoutMs);
+    int n = ::epoll_wait(epfd_, evs.data(), evs.size(), timeoutMs);
     if(n < 0) return;
     else if(n == 0) return;
     for(int i = 0; i < n; ++i){

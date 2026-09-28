@@ -1,27 +1,16 @@
 #pragma once
 
-
 #include <sstream>
 #include <utility>
+#include <string>
 #include "server/noncopyable.hpp"
-#include <iostream>
 namespace server
 {
 
 enum class Level{ TRACE, DEBUG, INFO, WARN, ERROR};
 
-// 一对自由函数: 等级->字符串
-const char* level_str(Level lv)
-{
-    switch (lv) {
-        case Level::TRACE: return "TRACE";
-        case Level::DEBUG: return "DEBUG";
-        case Level::INFO:  return "INFO";
-        case Level::WARN:  return "WARN";
-        case Level::ERROR: return "ERROR";
-        default:           return "UNKNOWN";
-    }
-}
+// 一对自由函数: 等级->字符串（实现已移 log.cpp）
+const char* level_str(Level lv);
 
 class Logger: public Noncopyable
 {
@@ -42,23 +31,5 @@ private:
     void do_log(Level lv, const std::string& msg);
     Level level_ = Level::INFO;
 };
-
-
-Logger& Logger::instance()
-{
-    static Logger inst;
-    return inst;
-}
-
-void Logger::do_log(Level lv, const std::string& msg)
-{
-    std::cout << msg << '\n'; 
-    (void)lv;
-}
-
-void Logger::set_level(Level lv)
-{
-    this->level_ = lv;
-}
 
 }

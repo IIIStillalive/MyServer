@@ -1,6 +1,6 @@
 #pragma once
 
-#include <fcntl.h>
+#include <functional>
 
 #include "channel.hpp"
 #include "socket.hpp"
@@ -18,27 +18,23 @@ public:
 
     int fd();
     void loop();  // 工作循环
+
+    // 预留回调接口：连接关闭时通知所有者(main)把我释放；所有权属于外部
+    void setCloseCallback(std::function<void(TcpConnection*)> cb);
+
 private:
+    void handleClose();
+    void handleError();
+    void onRead();
+    void onError();
     int set_nonblocking();
     Socket sock_;  //持有socket资源
     Channel ch_;  //持有channel资源，负责分发
     EventLoop* loop_;  //持有一个loop指针, 负责epoll事务
 
+    std::function<void(TcpConnection*)> closeCallback_;  // 点对点的释放通知
+    bool closed_ = false;  // 防重复关闭
+
 };
 
-TcpConnection::TcpConnection(int fd, EventLoop* loop): sock_(fd), ch_(fd, loop), loop_(loop){}
-int TcpConnection::set_nonblocking(){
-    int fd = sock_.fd();
-    int flags = ::fcntl(fd, F_GETFL, 0);
-    if(flags == -1) return -1;
-    if(::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) return -1;
-    return 0;
 }
-bool TcpConnection::listenconnection(){
-    if(set_nonblocking() < 0) return false;  //设置为非堵塞
-    if(!(this->loop_->updatachannel(&ch_))) return false;  //上树
-    return true;
-}
-
-}
-

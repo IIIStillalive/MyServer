@@ -12,3 +12,7 @@ live.err
 .vscode/
 .idea/
 .DS_Store
+
+# 临时验证脚本 / 编译产物
+test/
+test_wake

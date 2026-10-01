@@ -34,6 +34,7 @@ private:
     Channel ch_;              // 监听 fd 的事件分发器（不拥有 fd）
     EventLoop* loop_;
     std::function<void(int)> newConnectionCallback_;
+    
 };
 
 }

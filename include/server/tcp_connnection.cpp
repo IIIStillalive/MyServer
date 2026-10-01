@@ -59,7 +59,7 @@ void TcpConnection::setCloseCallback(std::function<void(TcpConnection*)> cb){
 void TcpConnection::handleClose(){
     if(closed_) return;                  // 防重复关闭（HUP 可能会触达多次）
     closed_ = true;
-    Logger::instance().log(Level::INFO, "fd closed, cleaning");
+    Logger::instance().log(Level::INFO, "fd: ", sock_.fd(), " closed, cleaning");
     loop_->removechannel(&ch_);          // ① 下树：poller 不再引用 ch_，防悬空
     if(closeCallback_) closeCallback_(this);  // ② 通知所有者 main 把我释放；此后别再用 this
 }

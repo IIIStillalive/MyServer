@@ -16,8 +16,8 @@
 - **清晰的资源所有权** — 资源由 RAII 封装（`Socket`）或连接对象（`Channel`、`TcpConnection`）持有；poller 只维护一个非占有的 fd → `Channel` 查找表。
 - **刻意慢速分层** — 每个组件都获得独立职责后再进入下一层，保证骨架始终可审查。
 
-> ✅ **Status / 状态: 单连接回显已跑通 — Reactor core + Acceptor + TcpConnection 可编译运行，端到端回显验证通过。**
-> 单线程 Reactor 核心（poller / epollpoller / event_loop）、`Acceptor`（监听 + ET accept）、`TcpConnection`（连接生命周期 + 回显）均已实现；服务组装在 `main.cpp`。多线程尚未实现。见 [Route / 路线图](#route--路线图).
+> ✅ **Status / 状态: 多线程地基已就绪，单连接回显跑通 — Reactor core + Acceptor + TcpConnection + EventLoop 跨线程唤醒/EventLoopThread 全部可编译运行。**
+> 单线程 Reactor 核心 + 监听 + 连接生命周期已实现；`EventLoop` 已具备跨线程唤醒（`runInLoop`/`wakeup`）与每个线程独立跑一个 loop 的能力（`EventLoopThread`）。`ThreadPool` 与 TcpServer 接池派发多线程仍在开发中。见 [Route / 路线图](#route--路线图).
 
 ---
 
@@ -25,19 +25,19 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│                 main.cpp                    │  entry point
-└─────────────────────────────────────────────┘
-                    │
-┌─────────────────────────────────────────────┐
 │                main.cpp                    │  entry point
-│   Acceptor → accepts → TcpConnection(×N)   │  assembly: 监听 + 每连接 I/O（服务组装现驻 main）
 └─────────────────────────────────────────────┘
                     │
 ┌─────────────────────────────────────────────┐
-│                EventLoop                    │  引擎：循环 + 分发  (owns a Poller)
-│   poll() → for each ready ch: ch.handleback │
+│                TcpServer                    │  服务组装 (owns 线程池)
+│   Acceptor ──accepts──▶ TcpConnection(×N)  │  监听 + 每连接 I/O
+└─────────────────────────────────────────────┘
+                    │
+┌─────────────────────────────────────────────┐
+│        EventLoopThread / ThreadPool         │  多线程地基（每个 worker 一个 loop）
+│        EventLoop (main)  └─getNextLoop─▶    │  
 └───────────────┬─────────────────────────────┘
-                │ updatachannel / removechannel
+                │ updatachannel / removechannel / runInLoop(跨线程唤醒)
 ┌───────────────▼─────────────────────────────┐
 │       Poller (抽象/abstract)                │
 │       EpollPoller (epoll 实现)              │   epoll_wait → active Channel*
@@ -50,7 +50,7 @@
 └─────────────────────────────────────────────┘
 ```
 
-设计遵循经典 **Reactor** 模式：单线程持有 epoll fd 并运行事件循环；就绪状态以 `Channel*` 回传，按事件分发回调。
+设计遵循经典 **Reactor** 模式：就绪状态以 `Channel*` 回传，按事件分发回调。`EventLoop` 用 `eventfd` 实现跨线程唤醒——任务（`runInLoop`）可被派到任意线程的 loop 执行，这是多 Reactor 并行的地基。
 
 ---
 
@@ -65,12 +65,14 @@
 │   ├── channel.hpp/.cpp     # 单 fd 事件分发 / per-fd dispatch（持 fd 数字，不拥有）
 │   ├── poller.hpp           # Poller 抽象 / abstraction
 │   ├── epollpoller.hpp      # epoll 实现 / epoll backend
-│   ├── event_loop.hpp/.cpp  # Reactor 引擎 / the engine
+│   ├── event_loop.hpp/.cpp  # Reactor 引擎 + 跨线程唤醒（runInLoop/eventfd） / the engine
+│   ├── eventloopthread.hpp/.cpp # 每线程一个 loop 的启动器 / run one loop per thread
+│   ├── thread_pool.hpp      #（空壳 stub，待实现）
 │   ├── tcp_connnection.hpp/.cpp # 单个连接管理（Socket+Channel） / one connection
 │   ├── acceptor.hpp/.cpp    # 监听 + ET accept / listening & accepting
+│   ├── tcpserver.hpp/.cpp   # 服务组装（持有连接 + 线程池入口） / server assembly
 │   ├── log.hpp/.cpp         # Logger 单例 / logger singleton
 │   ├── errno.hpp/.cpp       # errno RAII 守卫 / errno guard
-│   └── (thread_pool.*)      # （规划中 / planned）
 └── src/
     └── main.cpp             # 入口 + 服务组装 / entry & assembly
 ```
@@ -95,10 +97,12 @@ printf 'hello\n' | nc 127.0.0.1 8888   # 期望回显 hello
 - [x] Reactor 核心: `Channel`, `Poller` / `EpollPoller`, `EventLoop`
 - [x] `Acceptor` — 监听 + ET accept，把 fd 交给 `TcpConnection`
 - [x] `TcpConnection` I/O 回调 — 基于 epoll 的单连接回显（端到端验证通过）
-- [x] 首个端到端演示：完整回显服务器
+- [x] `TcpServer` — 服务组装（持有连接 + 释放）
+- [x] EventLoop 跨线程地基 — `eventfd` 唤醒 + `runInLoop` + `EventLoopThread`（SUB-THREAD 验证通过）
+- [ ] `ThreadPool` — N 个 worker loop + `getNextLoop()` 轮询（numThreads==0 降级回 main loop）
+- [ ] TcpServer 接池 — 新连接派发到 worker loop，连接容器按 loop 分区
 - [ ] `Buffer` — 让 read/write 与 socket 就绪状态解耦
 - [ ] 「正常断开 vs 真错误」日志语义细分（FIN → INFO，仅真错误 → ERROR）
-- [ ] `ThreadPool` + 多 Reactor 线程
 
 ---
 

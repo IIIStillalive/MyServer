@@ -24,15 +24,22 @@ int TcpConnection::fd(){
 void TcpConnection::onRead(){
     std::shared_ptr<TcpConnection> keep = shared_from_this();  // 保活：回调栈结束前不许被析构(UAF 免疫)
     int saveErrno = 0;
-    ssize_t n = inputBuffer_.readFd(sock_.fd(), &saveErrno);
-    if(n > 0){
-        if(messageCallback_) messageCallback_(this, &inputBuffer_);  // 交给解析层(Codec)；不再硬编码回显
-    } else if(n == 0){
-        handleClose();
-    } else {
-        if(saveErrno != EAGAIN && saveErrno != EWOULDBLOCK)
-            handleError();
-        // EAGAIN → 读空，本轮正常结束
+    // ET 边缘触发铁律：必须循环读到 EAGAIN 才停。
+    // 否则一次 readv 未读尽的数据滞留内核缓冲，而 ET 下 epoll 不再报 EPOLLIN，
+    // 对端 close() 时本端 close 一个仍有未读数据的 socket → 内核发 RST → 对端 ConnectionResetError。
+    for(int i = 0; i < 64; ++i){  // 循环上限：防单次 EPOLLIN 疯狂读饿死事件循环
+        ssize_t n = inputBuffer_.readFd(sock_.fd(), &saveErrno);
+        if(n > 0){
+            if(messageCallback_) messageCallback_(this, &inputBuffer_);  // 交给解析层(Codec)剥帧
+            // 继续读：可能还有剩余数据
+        } else if(n == 0){
+            handleClose();          // 对端 FIN
+            return;                 // 已关闭，不再读
+        } else {
+            if(saveErrno == EAGAIN || saveErrno == EWOULDBLOCK) break;  // 读空，本轮正常结束
+            handleError();          // 真错误（非 EAGAIN）
+            return;
+        }
     }
 }
 

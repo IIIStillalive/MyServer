@@ -29,18 +29,8 @@ bool Channel::isWriting() const{
 }
 
 void Channel::handleback(){
-    if(revents_ & EPOLLHUP){
-        if(closecallback){
-            closecallback();  // 对端挂断 → 独立关闭回调（正常断开走 INFO，不按错误处理）
-        }
-    }
-    if(revents_ & EPOLLERR){
-        if(errorcallback){
-            errorcallback();  // 真错误 → 按 error 处理
-        }
-    }
-    if(revents_ & EPOLLIN)
-    {
+    // 顺序 = IN → OUT → ERR → HUP：先读尽数据再关闭（close 不带未读 → 不触发 RST）
+    if(revents_ & EPOLLIN){
         if(readcallback){
             readcallback();
         }
@@ -48,6 +38,16 @@ void Channel::handleback(){
     if(revents_ & EPOLLOUT){
         if(writecallback){
             writecallback();
+        }
+    }
+    if(revents_ & EPOLLERR){
+        if(errorcallback){
+            errorcallback();  // 真错误 → 按 error 处理
+        }
+    }
+    if(revents_ & EPOLLHUP){
+        if(closecallback){
+            closecallback();  // 对端挂断 → 独立关闭回调（正常断开走 INFO，不按错误处理）
         }
     }
 }

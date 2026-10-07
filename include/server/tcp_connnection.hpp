@@ -22,6 +22,7 @@ public:
     bool connection();
 
     int fd();
+    EventLoop* getLoop() const;  // 归属 loop：释放时把所有权交回该线程析构，消除跨线程竞态
     void loop();  // 工作循环
 
     // 预留回调接口：连接关闭时通知所有者(main)把我释放；所有权属于外部

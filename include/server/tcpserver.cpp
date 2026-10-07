@@ -60,7 +60,12 @@ void TcpServer::onNewConnection(int cfd){                 // 在 main loop 线�
 }
 
 void TcpServer::removeConnection(int cfd){                // 在 main loop 线程
-    conns_.erase(cfd);                                    // 丢 shared_ptr → 若再无其他引用则析构 → close(fd)
+    auto it = conns_.find(cfd);
+    if(it == conns_.end()) return;
+    auto conn = std::move(it->second);                    // 移出 map（map 存取都在 main，单线程安全）
+    conns_.erase(it);
+    // 所有权交回归属 ioLoop 线程再析构：避免在 main 线程析构与 ioLoop 回调跨线程竞态（bad_weak_ptr 崩溃）
+    conn->getLoop()->runInLoop([conn](){});               // 空任务队尾释放；若 ioLoop 栈上还有 keep，析构再推迟到回调返回
 }
 
 }

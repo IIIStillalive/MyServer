@@ -19,9 +19,13 @@ int TcpConnection::set_nonblocking(){
 int TcpConnection::fd(){
     return sock_.fd();
 }
+EventLoop* TcpConnection::getLoop() const{
+    return loop_;
+}
 
 // onRead：用 inputBuffer_ 读，回显走 send（不再裸 write）
 void TcpConnection::onRead(){
+    if(closed_) return;  // 已关闭（可能同帧 HUP|IN 已走 handleClose）→ 不再 shared_from_this
     std::shared_ptr<TcpConnection> keep = shared_from_this();  // 保活：回调栈结束前不许被析构(UAF 免疫)
     int saveErrno = 0;
     // ET 边缘触发铁律：必须循环读到 EAGAIN 才停。

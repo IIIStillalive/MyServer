@@ -9,8 +9,12 @@ add_executable(server
     include/server/event_loop.cpp
     include/server/acceptor.cpp
     include/server/tcpserver.cpp
+    include/server/eventloopthread.cpp
+    include/server/thread_pool.cpp
     include/server/channel.cpp
     include/server/tcp_connnection.cpp
+    include/server/buffer.cpp
+    include/server/length_header_codec.cpp
     include/server/socket.cpp
     include/server/log.cpp
     include/server/errno.cpp

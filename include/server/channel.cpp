@@ -22,6 +22,10 @@ void Channel::update(){
 
 void Channel::disablewriting(){
     this->events &= ~EPOLLOUT;
+    update();  //清位后必须同步到 epoll，否则 EPOLLOUT 仍被报告 → 空转/忙等
+}
+bool Channel::isWriting() const{
+    return events & EPOLLOUT;
 }
 
 void Channel::handleback(){
@@ -30,13 +34,13 @@ void Channel::handleback(){
             errorcallback();  //存在就调用
         }
     }
-    else if(revents_ & EPOLLIN)
+    if(revents_ & EPOLLIN)
     {
         if(readcallback){
             readcallback();
         }
     }
-    else if(revents_ & EPOLLOUT){
+    if(revents_ & EPOLLOUT){
         if(writecallback){
             writecallback();
         }

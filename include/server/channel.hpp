@@ -20,6 +20,7 @@ public:
 
     //void disablereading();  //
     void disablewriting();  //在完成某个事件后取消
+    bool isWriting() const;  //当前是否处于可写关注（TcpConnection 发送前判断）
     void update();  //更新状态
 
     void handleback();  //根据revents调用不同的callback,具体实现就是位操作

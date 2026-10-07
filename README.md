@@ -16,7 +16,7 @@
 - **应用层缓冲 `Buffer`** — `[readerIndex_, writerIndex_)` 未读模型；`readFd` 用 `readv` 双段减拷贝；read/write 与 socket 就绪状态解耦。
 - **长度前缀协议 `LengthHeaderCodec`** — `[4 字节大端长度][payload]` 帧；`onMessage` 循环切帧，半包攒、粘包拆。
 - **安全析构（UAF 免疫）** — `TcpConnection` 继承 `enable_shared_from_this`，回调栈内局部共享指针保活；连接容器 `conns_` 插入/删除全部串行化在 main loop 线程，消除跨线程 race。
-- **优雅停机** — signal handler 仅做 atomic store + eventfd write（async-signal-safe），`quit_` 原子标志，Ctrl+C / SIGTERM 干净退出。
+- **优雅停机** — signal handler 仅做 atomic store + eventfd write（async-signal-safe），`quit_` 原子标志，Ctrl+C / SIGTERM 干净退出；main loop 一停即触发对象析构连锁（`~TcpServer → ~ThreadPool → 逐个 ~EventLoopThread quit()+join()`）驱逐并收拢全部 worker 线程。
 - **刻意逐层展开** — 每个组件拿到独立职责稳定后再进下一层，骨架始终可审查。
 
 > ✅ **Status / 状态: 传输层已完整闭合 — ThreadPool 多线程接池 + Buffer + 长度前缀 Codec + shared_ptr 安全析构 + 连接容器串行化 + 优雅停机全部落地，`test/codec_client.py`（单条/粘包/半包）与 `test/concurrent_client.py`（50 连接 × 20 消息并发）验证通过。**

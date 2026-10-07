@@ -6,6 +6,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <mutex>
+#include <atomic>
 #include "socket.hpp"
 namespace server{  //为readys调用回调函数
 class Channel;
@@ -44,6 +45,6 @@ private:
     std::unique_ptr<Channel> eventch_;  //负责eventfd状态设置和改变的channel
     std::vector<Callback> pendingFunctors_;  //任务队列
 
-    bool quit_ = false;  //loop结束标志
+    std::atomic<bool> quit_{false};  //loop结束标志（跨线程 quit 须原子；signal handler 里也要写）
 };
 }

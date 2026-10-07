@@ -29,9 +29,14 @@ bool Channel::isWriting() const{
 }
 
 void Channel::handleback(){
-    if(revents_ & (EPOLLERR | EPOLLHUP)){  //优先调用errorcallback()
+    if(revents_ & EPOLLHUP){
+        if(closecallback){
+            closecallback();  // 对端挂断 → 独立关闭回调（正常断开走 INFO，不按错误处理）
+        }
+    }
+    if(revents_ & EPOLLERR){
         if(errorcallback){
-            errorcallback();  //存在就调用
+            errorcallback();  // 真错误 → 按 error 处理
         }
     }
     if(revents_ & EPOLLIN)

@@ -88,6 +88,7 @@ void TcpConnection::onWrite(){  // EPOLLOUT 可写事件回调
 bool TcpConnection::listenconnection(){
     if(set_nonblocking() < 0) return false;  //设置为非堵塞
     ch_.setreadback([this](){ this->onRead();});
+    ch_.setcloseback([this](){ this->handleClose();});  // 对端挂断 → 关闭（INFO，不按错误）
     ch_.setwriteback([this](){ this->onWrite();});
     ch_.seterrorback([this](){ this->onError();});
     ch_.enablereading();   // 内部已调用 update() → updatachannel 上树，单点发生

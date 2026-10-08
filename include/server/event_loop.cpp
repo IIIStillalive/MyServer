@@ -2,12 +2,13 @@
 #include "event_loop.hpp"
 #include "epollpoller.hpp"
 #include "channel.hpp"
+#include "timer_queue.hpp"
 #include "log.hpp"
 #include "errno.hpp"
 
 namespace server{
 
-EventLoop::EventLoop():poller_(std::make_unique<Epollpoller>()), thread_id_(std::this_thread::get_id()), eventsoc_(createEventfd()), eventch_(std::make_unique<Channel>(eventsoc_.fd(), this)){
+EventLoop::EventLoop():poller_(std::make_unique<Epollpoller>()), timerQueue_(new TimerQueue(this)), thread_id_(std::this_thread::get_id()), eventsoc_(createEventfd()), eventch_(std::make_unique<Channel>(eventsoc_.fd(), this)){
     eventch_->setreadback([this]{ handlewake(); });
     eventch_->enablereading();
 }
@@ -19,6 +20,18 @@ EventLoop::~EventLoop(){
 void EventLoop::quit(){
     quit_ = true;
     if(!isInLoopThread()) wakeup();
+}
+
+TimerId EventLoop::runAfter(double delay, TimerCallback cb){
+    int64_t expiry = nowMicros() + static_cast<int64_t>(delay * 1000000.0);
+    return timerQueue_->addTimer(std::move(cb), expiry, 0);
+}
+TimerId EventLoop::runEvery(double interval, TimerCallback cb){
+    int64_t iv = static_cast<int64_t>(interval * 1000000.0);
+    return timerQueue_->addTimer(std::move(cb), nowMicros() + iv, iv);
+}
+void EventLoop::cancel(TimerId id){
+    timerQueue_->cancel(id);
 }
 bool EventLoop::updatachannel(Channel* ch){
     return poller_->updatechannel(ch);

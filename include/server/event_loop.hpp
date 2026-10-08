@@ -8,9 +8,11 @@
 #include <mutex>
 #include <atomic>
 #include "socket.hpp"
+#include "timer.hpp"   // TimerCallback / TimerId / nowMicros
 namespace server{  //为readys调用回调函数
 class Channel;
 class Poller;
+class TimerQueue;
 class EventLoop{
 
 public:
@@ -28,6 +30,11 @@ public:
 
     void quit();
 
+    // ---- 定时器接口（要求调用者处于本 loop 线程；跨线程由调用方 runInLoop 转发）----
+    TimerId runAfter(double delay, TimerCallback cb);    // delay 秒后执行一次
+    TimerId runEvery(double interval, TimerCallback cb); // 每 interval 秒循环
+    void cancel(TimerId id);                             // 取消未到期定时器
+
 
 private:
     int createEventfd();  //初始化eventfd_
@@ -38,6 +45,7 @@ private:
     std::vector<Channel*> readys;
     //Poller* poller_;  //指向子类对象
     std::unique_ptr<Poller> poller_;
+    std::unique_ptr<TimerQueue> timerQueue_;  //timerfd 定时队列（归本 loop 线程）
     std::thread::id thread_id_;  //当前loop的归属Thread的id
 
     std::mutex mutex_;

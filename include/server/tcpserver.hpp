@@ -31,6 +31,7 @@ public:
     using MessageCallback = LengthHeaderCodec::MessageCallback;  // (TcpConnection*, const std::string&)
     void setThreadNum(size_t n);   // 透传给 ThreadPool：worker 数量
     void setMessageCallback(const MessageCallback& cb);  // 业务层：收到一条完整消息
+    void setConnectionTimeout(double seconds); // 透传：每连接空闲超时（0 或未调用=不启用）
     void sendMessage(TcpConnection* conn, const void* data, size_t n);  // 编码长度头后发给某连接
     bool start();                  // 先起线程池，再建 Acceptor + 挂 epoll
 
@@ -43,6 +44,7 @@ private:
     ThreadPool threadPool_;             // worker 池（值成员，最后构造→最先析构）
     std::map<int, std::shared_ptr<TcpConnection>> conns_;  // key=fd，单一映射；shared_ptr 供回调栈保活
     LengthHeaderCodec codec_;            // 长度前缀编解码：粘包/半包 → 一条完整业务消息
+    double connectionTimeout_ = 0;       // 空闲超时（秒），0=不启用；onNewConnection 时透传给新连接
 };
 
 }

@@ -34,6 +34,7 @@ void TcpConnection::onRead(){
     for(int i = 0; i < 64; ++i){  // 循环上限：防单次 EPOLLIN 疯狂读饿死事件循环
         ssize_t n = inputBuffer_.readFd(sock_.fd(), &saveErrno);
         if(n > 0){
+            lastActive_ = nowMicros();                     // 刷新活跃时刻：读进数据 = 连接还活着
             if(messageCallback_) messageCallback_(this, &inputBuffer_);  // 交给解析层(Codec)剥帧
             // 继续读：可能还有剩余数据
         } else if(n == 0){
@@ -117,9 +118,32 @@ void TcpConnection::setCloseCallback(std::function<void(TcpConnection*)> cb){
 void TcpConnection::setMessageCallback(MessageCallback cb){
     messageCallback_ = cb;
 }
+void TcpConnection::setConnectionTimeout(double seconds){
+    std::shared_ptr<TcpConnection> keep = shared_from_this();  // 保活：启动定时器瞬间不允许被析构
+    if(closed_ || ch_.isremove()) return;                      // 已关/已下树：不启动
+    timeoutUs_ = static_cast<int64_t>(seconds * 1000000.0);
+    lastActive_ = nowMicros();                                 // 从此刻起算空闲
+    // 用「单次 runAfter + 自续」而非 runEvery：闭环停在当前 tick（单次执行完即删），
+    // 正在执行的 tick 不在 set 里，handleClose 的 cancel 只需取消「尚未触发的下一次」，
+    // 天然规避 repeat-timer 在回调内 cancel 失效导致的悬垂 this。（见 task_plan 边界）
+    timeoutTimerId_ = loop_->runAfter(1.0, [this]{ checkIdle(); });
+}
+void TcpConnection::checkIdle(){
+    if(closed_ || ch_.isremove()) return;   // 已关闭/已下树（cancel 前的残留触发）→ 忽略且不再续
+    if(nowMicros() - lastActive_ >= timeoutUs_){
+        timeoutTimerId_ = 0;
+        handleClose();                      // 超时无活跃 → 走既有关闭链（所有权交还 main 释放）
+    } else {
+        timeoutTimerId_ = loop_->runAfter(1.0, [this]{ checkIdle(); });  // 未超时 → 再等一秒
+    }
+}
 void TcpConnection::handleClose(){
     if(closed_) return;                  // 防重复关闭（HUP 可能会触达多次）
     closed_ = true;
+    if(timeoutTimerId_ != 0){            // 停掉尚未触发的下一次心跳（当前 tick 为单次，跑完即删）
+        loop_->cancel(timeoutTimerId_);
+        timeoutTimerId_ = 0;
+    }
     Logger::instance().log(Level::INFO, "threadID: ", std::this_thread::get_id());
     Logger::instance().log(Level::INFO, "fd: ", sock_.fd(), " closed, cleaning");
     loop_->removechannel(&ch_);          // ① 下树：poller 不再引用 ch_，防悬空

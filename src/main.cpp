@@ -40,6 +40,8 @@ int main(){
     server.setMessageCallback([&server](TcpConnection* conn, const std::string& msg){
         server.sendMessage(conn, msg.data(), msg.size());  // 必须经 Codec 编长度头；不能裸 conn->send
     });
+    // 空闲超时（秒）：连接在超时内无任何数据收发则主动断开并回收。0 或不调用 = 不启用。
+    server.setConnectionTimeout(10);
     if(!server.start()){
         log.log(Level::ERROR, "TcpServer::start failed, exit");
         return -1;

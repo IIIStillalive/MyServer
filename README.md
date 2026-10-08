@@ -124,8 +124,9 @@ print(s.recv(ln))                                # 期望 b'hello'
 - [x] 优雅停机 — signal + atomic quit 标志，async-safe handler
 - [x] 连接容器串行化 — `conns_` map 消除跨线程 race
 - [ ] 真实业务 — 转发 / 广播 / 聊天室（替换 echo 桩）
-- [ ] `TimerQueue` — 定时器（心跳 / 超时关闭）
-- [ ] 「正常断开 vs 真错误」日志语义细分（FIN → INFO，仅真错误 → ERROR）
+- [x] `TimerQueue` — 定时器（心跳 / 超时关闭）
+- [x] 空闲超时 / 心跳 — 每连接 `runAfter` 自续检查空闲，超时主动断开回收
+- [x] 「正常断开 vs 真错误」日志语义细分（FIN → INFO，仅真错误 → ERROR）
 
 ---
 

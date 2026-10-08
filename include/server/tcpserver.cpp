@@ -19,6 +19,9 @@ void TcpServer::setThreadNum(size_t n){
 void TcpServer::setMessageCallback(const MessageCallback& cb){
     codec_.setMessageCallback(cb);   // 业务层：收到一条完整消息时被调用
 }
+void TcpServer::setConnectionTimeout(double seconds){
+    connectionTimeout_ = seconds;    // 存下；新建连接时透传
+}
 void TcpServer::sendMessage(TcpConnection* conn, const void* data, size_t n){
     codec_.send(conn, data, n);      // 编码 [长度头][payload] 再交给底层传输（业务回发必经此口）
 }
@@ -48,6 +51,8 @@ void TcpServer::onNewConnection(int cfd){                 // 在 main loop 线�
             codec_.onMessage(conn, buf);
         });
         if(conn->listenconnection()){                     // 上树发生在 ioLoop 的 epoll
+            // 空闲超时：同样在 ioLoop 线程启动（TimerQueue 同线程调度），超时则由心跳关闭
+            if(connectionTimeout_ > 0) conn->setConnectionTimeout(connectionTimeout_);
             // 登记也拉回 main：conns_ 的插入/删除全走 main runInLoop 串行 → 无跨线程 race
             // insert 在 listenconnection 成功后立刻提交、close 只在其后同线程触发 → FIFO 保证先记后删
             loop_->runInLoop([this, cfd, conn]{
